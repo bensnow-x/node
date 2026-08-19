@@ -6,26 +6,143 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 120
+    timeout-minutes: 180
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install Podman
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y podman
+          sudo apt-get install -y podman python3
 
-      - name: Patch build.sh for GitHub Actions
+      - name: Patch ARM64 sources
         working-directory: ex
         run: |
-          sed -i 's/podman run -it/podman run/g' build.sh
-          sed -i '1a set -e' build.sh
-          sed -i 's/-march=haswell/-march=native/g' build.sh
-          sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
-          sed -i 's/erlang_builder/localhost\/erlang_builder/g' build.sh
-          chmod +x build.sh
+          python3 <<'PY'
+          from pathlib import Path
+
+          # ============================================================
+          # sol_freivalds.rs
+          # ============================================================
+          p = Path("native/rdb/src/consensus/bic/sol_freivalds.rs")
+          s = p.read_text()
+
+          s = s.replace(
+              "use std::arch::x86_64::*;",
+              '#[cfg(target_arch = "x86_64")]\nuse std::arch::x86_64::*;'
+          )
+
+          old = '''pub fn freivalds_inner(Rs: &[[i8; 16]; 3], A: &[[u8; 50_240]; 16], B: &[[i8; 16]; 50_240], C: &[[i32; 16]; 16]) -> bool {
+              if std::is_x86_feature_detected!("avx2") {
+                  unsafe { freivalds_inner_avx2(Rs, A, B, C) }
+              } else {
+                  freivalds_inner_scalar(Rs, A, B, C)
+              }
+          }'''
+
+          new = '''pub fn freivalds_inner(
+              Rs: &[[i8; 16]; 3],
+              A: &[[u8; 50_240]; 16],
+              B: &[[i8; 16]; 50_240],
+              C: &[[i32; 16]; 16],
+          ) -> bool {
+              #[cfg(target_arch = "x86_64")]
+              {
+                  if std::is_x86_feature_detected!("avx2") {
+                      return unsafe { freivalds_inner_avx2(Rs, A, B, C) };
+                  }
+              }
+
+              freivalds_inner_scalar(Rs, A, B, C)
+          }'''
+
+          if old not in s:
+              raise SystemExit("sol_freivalds: freivalds_inner pattern not found")
+
+          s = s.replace(old, new)
+
+          # Disable the AVX-only helper code on ARM64.
+          markers = [
+              "unsafe fn hsum256_epi32",
+              "unsafe fn hsum256_epi64",
+              "unsafe fn dot8_i32_to_i64",
+              "unsafe fn acc_i32x8_into_i64",
+              "struct I32x16",
+              "unsafe fn load_i8x16_as_i32",
+              "pub unsafe fn freivalds_inner_avx2",
+          ]
+
+          for marker in markers:
+              s = s.replace(
+                  marker,
+                  '#[cfg(target_arch = "x86_64")]\n' + marker,
+                  1
+              )
+
+          p.write_text(s)
+
+          # ============================================================
+          # upow.rs
+          # ============================================================
+          p = Path("native/rdb/src/upow.rs")
+          s = p.read_text()
+
+          s = s.replace(
+              "use std::arch::x86_64::*;",
+              '#[cfg(target_arch = "x86_64")]\nuse std::arch::x86_64::*;'
+          )
+
+          old = '''fn detect_backend() -> Backend {
+              if is_x86_feature_detected!("avx512f") && is_x86_feature_detected!("avx512bw") && is_x86_feature_detected!("avx512vnni") {
+                  Backend::Avx512Vnni
+              } else if is_x86_feature_detected!("avx2") {
+                  Backend::Avx2
+              } else {
+                  Backend::Scalar
+              }
+          }'''
+
+          new = '''fn detect_backend() -> Backend {
+              #[cfg(target_arch = "x86_64")]
+              {
+                  if is_x86_feature_detected!("avx512f")
+                      && is_x86_feature_detected!("avx512bw")
+                      && is_x86_feature_detected!("avx512vnni")
+                  {
+                      return Backend::Avx512Vnni;
+                  }
+
+                  if is_x86_feature_detected!("avx2") {
+                      return Backend::Avx2;
+                  }
+              }
+
+              Backend::Scalar
+          }'''
+
+          if old not in s:
+              raise SystemExit("upow: detect_backend pattern not found")
+
+          s = s.replace(old, new)
+
+          # Disable x86 SIMD implementations on ARM64.
+          markers = [
+              '#[target_feature(enable = "avx2")]\nunsafe fn matmul_avx2_fused',
+              '#[target_feature(enable = "avx512f,avx512bw,avx512vnni")]\nunsafe fn matmul_avx512_fused',
+          ]
+
+          for marker in markers:
+              replacement = '#[cfg(target_arch = "x86_64")]\n' + marker
+              if marker not in s:
+                  raise SystemExit("upow: SIMD marker not found")
+              s = s.replace(marker, replacement, 1)
+
+          p.write_text(s)
+
+          print("ARM64 patch completed.")
+          PY
 
       - name: Build builder image
         working-directory: ex
