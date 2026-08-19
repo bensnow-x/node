@@ -36,19 +36,30 @@ jobs:
         run: |
           ./build.sh
 
+      - name: Find Amadeus binary
+        run: |
+          echo "=== Searching for amadeusd ==="
+          find . -type f -name "amadeusd" -print
+
+          echo "=== Searching executable files ==="
+          find ex -type f -perm -111 -print | head -100
+
       - name: Verify binary
         run: |
-          echo "=== Repository ==="
-          pwd
-          echo "=== ex directory ==="
-          ls -lah ex
-          echo "=== Search amadeusd ==="
-          find ex -type f -name "amadeusd" -o -name "ama"
-          echo "=== Verify ==="
-          file ex/amadeusd
-          sha256sum ex/amadeusd
+          BINARY=$(find . -type f -name "amadeusd" -print -quit)
 
-       - name: Upload amadeusd
+          if [ -z "$BINARY" ]; then
+            echo "ERROR: amadeusd binary was not found."
+            exit 1
+          fi
+
+          echo "Found: $BINARY"
+          file "$BINARY"
+          sha256sum "$BINARY"
+
+          cp "$BINARY" ex/amadeusd
+
+      - name: Upload amadeusd
         uses: actions/upload-artifact@v4
         with:
           name: amadeusd-arm64
