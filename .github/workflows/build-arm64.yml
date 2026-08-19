@@ -37,14 +37,19 @@ jobs:
           ./build.sh
 
       - name: Verify binary
-        working-directory: ex
         run: |
-          file amadeusd
-          sha256sum amadeusd
+          echo "=== Repository ==="
+          pwd
+          echo "=== ex directory ==="
+          ls -lah ex
+          echo "=== Search amadeusd ==="
+          find ex -type f -name "amadeusd" -o -name "ama"
+          echo "=== Verify ==="
+          file ex/amadeusd
+          sha256sum ex/amadeusd
 
-      - name: Upload amadeusd
+       - name: Upload amadeusd
         uses: actions/upload-artifact@v4
         with:
           name: amadeusd-arm64
           path: ex/amadeusd
-          retention-days: 7
