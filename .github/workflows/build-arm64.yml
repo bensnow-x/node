@@ -24,43 +24,44 @@ jobs:
           sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
           chmod +x build.sh
 
-      - name: Build builder image
-        working-directory: ex
-        run: |
-          podman build \
-            --tag erlang_builder \
-            -f build.Dockerfile .
-
       - name: Build Amadeus
         working-directory: ex
         run: |
+          set -euxo pipefail
           ./build.sh
 
-      - name: Find Amadeus binary
-        run: |
-          echo "=== Searching for amadeusd ==="
-          find . -type f -name "amadeusd" -print
+          echo "=== Files after build ==="
+          find . -type f -name "ama" -o -name "amadeusd"
 
-          echo "=== Searching executable files ==="
-          find ex -type f -perm -111 -print | head -100
+          if [ ! -f amadeusd ]; then
+            echo "amadeusd not found, searching for ama..."
+            AMA=$(find . -type f -name "ama" -print -quit)
 
-      - name: Verify binary
-        run: |
-          BINARY=$(find . -type f -name "amadeusd" -print -quit)
+            if [ -z "$AMA" ]; then
+              echo "ERROR: ama binary was not found"
+              exit 1
+            fi
 
-          if [ -z "$BINARY" ]; then
-            echo "ERROR: amadeusd binary was not found."
-            exit 1
+            echo "Found: $AMA"
+            cp "$AMA" amadeusd
+            chmod +x amadeusd
           fi
 
-          echo "Found: $BINARY"
-          file "$BINARY"
-          sha256sum "$BINARY"
+          echo "=== amadeusd ==="
+          ls -lh amadeusd
+          file amadeusd
+          sha256sum amadeusd
 
-          cp "$BINARY" ex/amadeusd
+      - name: Verify binary
+        working-directory: ex
+        run: |
+          test -f amadeusd
+          file amadeusd
+          sha256sum amadeusd
 
       - name: Upload amadeusd
         uses: actions/upload-artifact@v4
         with:
           name: amadeusd-arm64
           path: ex/amadeusd
+          retention-days: 7
