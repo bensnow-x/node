@@ -24,17 +24,28 @@ jobs:
           sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
           chmod +x build.sh
 
+      - name: Build builder image
+        working-directory: ex
+        run: |
+          podman build \
+            --tag erlang_builder \
+            --file build.Dockerfile .
+
       - name: Build Amadeus
         working-directory: ex
         run: |
           set -euxo pipefail
           ./build.sh
 
-          echo "=== Files after build ==="
-          find . -type f -name "ama" -o -name "amadeusd"
+      - name: Find Amadeus binary
+        working-directory: ex
+        run: |
+          echo "=== Searching for binary ==="
+          find . -type f \( -name "ama" -o -name "amadeusd" \) -print
 
-          if [ ! -f amadeusd ]; then
-            echo "amadeusd not found, searching for ama..."
+          if [ -f amadeusd ]; then
+            echo "Found amadeusd"
+          else
             AMA=$(find . -type f -name "ama" -print -quit)
 
             if [ -z "$AMA" ]; then
@@ -42,20 +53,15 @@ jobs:
               exit 1
             fi
 
-            echo "Found: $AMA"
+            echo "Found ama at: $AMA"
             cp "$AMA" amadeusd
             chmod +x amadeusd
           fi
 
-          echo "=== amadeusd ==="
-          ls -lh amadeusd
-          file amadeusd
-          sha256sum amadeusd
-
       - name: Verify binary
         working-directory: ex
         run: |
-          test -f amadeusd
+          ls -lh amadeusd
           file amadeusd
           sha256sum amadeusd
 
