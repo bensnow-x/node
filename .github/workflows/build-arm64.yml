@@ -18,21 +18,21 @@ jobs:
           sudo apt-get install -y podman
 
       - name: Patch build.sh for GitHub Actions
-  working-directory: ex
-  run: |
-    sed -i 's/podman run -it/podman run/g' build.sh
-    sed -i '1a set -e' build.sh
-    sed -i 's/-march=haswell/-march=native/g' build.sh
-    sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
-    sed -i 's/erlang_builder/localhost\/erlang_builder/g' build.sh
-    chmod +x build.sh
+        working-directory: ex
+        run: |
+          sed -i 's/podman run -it/podman run/g' build.sh
+          sed -i '1a set -e' build.sh
+          sed -i 's/-march=haswell/-march=native/g' build.sh
+          sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
+          sed -i 's/erlang_builder/localhost\/erlang_builder/g' build.sh
+          chmod +x build.sh
 
       - name: Build builder image
-  working-directory: ex
-  run: |
-    podman build \
-      --tag localhost/erlang_builder \
-      --file build.Dockerfile .
+        working-directory: ex
+        run: |
+          podman build \
+            --tag localhost/erlang_builder \
+            --file build.Dockerfile .
 
       - name: Build Amadeus
         working-directory: ex
