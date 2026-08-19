@@ -24,14 +24,15 @@ jobs:
     sed -i '1a set -e' build.sh
     sed -i 's/-march=haswell/-march=native/g' build.sh
     sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
+    sed -i 's/erlang_builder/localhost\/erlang_builder/g' build.sh
     chmod +x build.sh
 
       - name: Build builder image
-        working-directory: ex
-        run: |
-          podman build \
-            --tag erlang_builder \
-            --file build.Dockerfile .
+  working-directory: ex
+  run: |
+    podman build \
+      --tag localhost/erlang_builder \
+      --file build.Dockerfile .
 
       - name: Build Amadeus
         working-directory: ex
