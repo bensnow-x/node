@@ -1,0 +1,50 @@
+name: Build Amadeus ARM64
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Podman
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y podman
+
+      - name: Patch ARM64 build flags
+        working-directory: ex
+        run: |
+          sed -i 's/-march=haswell/-march=native/g' build.sh
+          sed -i 's/-C target-cpu=haswell/-C target-cpu=native/g' build.sh
+          chmod +x build.sh
+
+      - name: Build builder image
+        working-directory: ex
+        run: |
+          podman build \
+            --tag erlang_builder \
+            -f build.Dockerfile .
+
+      - name: Build Amadeus
+        working-directory: ex
+        run: |
+          ./build.sh
+
+      - name: Verify binary
+        working-directory: ex
+        run: |
+          file amadeusd
+          sha256sum amadeusd
+
+      - name: Upload amadeusd
+        uses: actions/upload-artifact@v4
+        with:
+          name: amadeusd-arm64
+          path: ex/amadeusd
+          retention-days: 7
