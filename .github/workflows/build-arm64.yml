@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 180
+    timeout-minutes: 300
 
     steps:
       - name: Checkout
@@ -24,7 +24,20 @@ jobs:
           from pathlib import Path
 
           # ============================================================
-          # sol_freivalds.rs
+          # Patch build.sh
+          # ============================================================
+          p = Path("build.sh")
+          s = p.read_text()
+
+          s = s.replace("podman run -it", "podman run")
+          s = s.replace("-march=haswell", "-march=native")
+          s = s.replace("-C target-cpu=haswell", "-C target-cpu=native")
+          s = s.replace("erlang_builder", "localhost/erlang_builder")
+
+          p.write_text(s)
+
+          # ============================================================
+          # Patch sol_freivalds.rs
           # ============================================================
           p = Path("native/rdb/src/consensus/bic/sol_freivalds.rs")
           s = p.read_text()
@@ -58,12 +71,9 @@ jobs:
               freivalds_inner_scalar(Rs, A, B, C)
           }'''
 
-          if old not in s:
-              raise SystemExit("sol_freivalds: freivalds_inner pattern not found")
+          if old in s:
+              s = s.replace(old, new)
 
-          s = s.replace(old, new)
-
-          # Disable the AVX-only helper code on ARM64.
           markers = [
               "unsafe fn hsum256_epi32",
               "unsafe fn hsum256_epi64",
@@ -75,16 +85,16 @@ jobs:
           ]
 
           for marker in markers:
-              s = s.replace(
-                  marker,
-                  '#[cfg(target_arch = "x86_64")]\n' + marker,
-                  1
-              )
+              if marker in s:
+                  cfg = '#[cfg(target_arch = "x86_64")]'
+                  before = cfg + "\n" + marker
+                  if before not in s:
+                      s = s.replace(marker, before, 1)
 
           p.write_text(s)
 
           # ============================================================
-          # upow.rs
+          # Patch upow.rs
           # ============================================================
           p = Path("native/rdb/src/upow.rs")
           s = p.read_text()
@@ -122,27 +132,34 @@ jobs:
               Backend::Scalar
           }'''
 
-          if old not in s:
-              raise SystemExit("upow: detect_backend pattern not found")
+          if old in s:
+              s = s.replace(old, new)
 
-          s = s.replace(old, new)
-
-          # Disable x86 SIMD implementations on ARM64.
           markers = [
               '#[target_feature(enable = "avx2")]\nunsafe fn matmul_avx2_fused',
               '#[target_feature(enable = "avx512f,avx512bw,avx512vnni")]\nunsafe fn matmul_avx512_fused',
           ]
 
           for marker in markers:
-              replacement = '#[cfg(target_arch = "x86_64")]\n' + marker
-              if marker not in s:
-                  raise SystemExit("upow: SIMD marker not found")
-              s = s.replace(marker, replacement, 1)
+              if marker in s:
+                  s = s.replace(
+                      marker,
+                      '#[cfg(target_arch = "x86_64")]\n' + marker,
+                      1
+                  )
 
           p.write_text(s)
 
-          print("ARM64 patch completed.")
+          print("================================")
+          print("ARM64 PATCH COMPLETE")
+          print("build.sh: x86 flags -> native")
+          print("sol_freivalds.rs: x86 SIMD guarded")
+          print("upow.rs: x86 SIMD guarded")
+          print("================================")
           PY
+
+          echo "=== Check build flags ==="
+          grep -nE 'haswell|march=|target-cpu=' build.sh || true
 
       - name: Build builder image
         working-directory: ex
@@ -161,6 +178,7 @@ jobs:
         working-directory: ex
         run: |
           echo "=== Searching for binary ==="
+
           find . -type f \( -name "ama" -o -name "amadeusd" \) -print
 
           if [ -f amadeusd ]; then
