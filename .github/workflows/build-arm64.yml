@@ -170,10 +170,20 @@ jobs:
             --file build.Dockerfile .
 
       - name: Build Amadeus
-        working-directory: ex
-        run: |
-          set -euxo pipefail
-          ./build.sh
+  working-directory: ex
+  run: |
+    set -euxo pipefail
+    ./build.sh
+
+    echo "=== SEARCHING ALL RELEASE OUTPUTS ==="
+    find . -maxdepth 6 -type f -print | sort | tail -200
+
+    echo "=== SEARCHING EXECUTABLES ==="
+    find . -type f -executable -print | sort | tail -100
+
+    echo "=== BUILD DIRECTORY ==="
+    ls -lah _build/prod/rel/ || true
+    find _build/prod/rel -maxdepth 4 -print | sort || true
 
       - name: Find Amadeus binary
         working-directory: ex
