@@ -177,24 +177,36 @@ jobs:
       - name: Find Amadeus binary
         working-directory: ex
         run: |
-          echo "=== Searching for binary ==="
+          set -euxo pipefail
 
+          echo "=== Searching for Amadeus binary ==="
+          pwd
+
+          echo "=== Workspace files ==="
           find . -type f \( -name "ama" -o -name "amadeusd" \) -print
 
-          if [ -f amadeusd ]; then
-            echo "Found amadeusd"
+          if [ -f "_build/prod/rel/bakeware/ama" ]; then
+            echo "Found ama at expected path"
+            cp "_build/prod/rel/bakeware/ama" amadeusd
+          elif [ -f "amadeusd" ]; then
+            echo "Found ./amadeusd"
           else
             AMA=$(find . -type f -name "ama" -print -quit)
 
             if [ -z "$AMA" ]; then
-              echo "ERROR: ama binary was not found"
+              echo "ERROR: Amadeus binary was not found"
               exit 1
             fi
 
             echo "Found ama at: $AMA"
             cp "$AMA" amadeusd
-            chmod +x amadeusd
           fi
+
+          chmod +x amadeusd
+
+          echo "=== Final binary ==="
+          ls -lh amadeusd
+          file amadeusd
 
       - name: Verify binary
         working-directory: ex
