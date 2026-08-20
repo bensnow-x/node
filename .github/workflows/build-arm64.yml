@@ -175,6 +175,12 @@ jobs:
     set -euxo pipefail
     ./build.sh
 
+    echo "=== CHECK AMADEUS OUTPUT ==="
+    ls -lah
+    ls -lah _build/prod/rel/bakeware/ || true
+    test -f amadeusd
+    file amadeusd
+
     echo "=== SEARCHING ALL RELEASE OUTPUTS ==="
     find . -maxdepth 6 -type f -print | sort | tail -200
 
