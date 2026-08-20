@@ -30,6 +30,7 @@ jobs:
           s = p.read_text()
 
           s = s.replace("podman run -it", "podman run")
+          s = s.replace("-v ../.:/root/node", '-v "$(cd .. && pwd):/root/node"')
           s = s.replace("-march=haswell", "-march=native")
           s = s.replace("-C target-cpu=haswell", "-C target-cpu=native")
           s = s.replace("erlang_builder", "localhost/erlang_builder")
