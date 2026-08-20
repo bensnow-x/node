@@ -26,26 +26,40 @@ jobs:
           # ============================================================
           # Patch build.sh
           # ============================================================
+
           p = Path("build.sh")
           s = p.read_text()
 
           s = s.replace("podman run -it", "podman run")
-          s = s.replace("-v ../.:/root/node", '-v "$(cd .. && pwd):/root/node"')
+          s = s.replace(
+              "-v ../.:/root/node",
+              '-v "$(cd .. && pwd):/root/node"'
+          )
           s = s.replace("-march=haswell", "-march=native")
-          s = s.replace("-C target-cpu=haswell", "-C target-cpu=native")
-          s = s.replace("erlang_builder", "localhost/erlang_builder")
+          s = s.replace(
+              "-C target-cpu=haswell",
+              "-C target-cpu=native"
+          )
+          s = s.replace(
+              "erlang_builder",
+              "localhost/erlang_builder"
+          )
 
           p.write_text(s)
 
           # ============================================================
           # Patch sol_freivalds.rs
           # ============================================================
-          p = Path("native/rdb/src/consensus/bic/sol_freivalds.rs")
+
+          p = Path(
+              "native/rdb/src/consensus/bic/sol_freivalds.rs"
+          )
           s = p.read_text()
 
           s = s.replace(
               "use std::arch::x86_64::*;",
-              '#[cfg(target_arch = "x86_64")]\nuse std::arch::x86_64::*;'
+              '#[cfg(target_arch = "x86_64")]\n'
+              'use std::arch::x86_64::*;'
           )
 
           old = '''pub fn freivalds_inner(Rs: &[[i8; 16]; 3], A: &[[u8; 50_240]; 16], B: &[[i8; 16]; 50_240], C: &[[i32; 16]; 16]) -> bool {
@@ -65,7 +79,9 @@ jobs:
               #[cfg(target_arch = "x86_64")]
               {
                   if std::is_x86_feature_detected!("avx2") {
-                      return unsafe { freivalds_inner_avx2(Rs, A, B, C) };
+                      return unsafe {
+                          freivalds_inner_avx2(Rs, A, B, C)
+                      };
                   }
               }
 
@@ -89,6 +105,7 @@ jobs:
               if marker in s:
                   cfg = '#[cfg(target_arch = "x86_64")]'
                   before = cfg + "\n" + marker
+
                   if before not in s:
                       s = s.replace(marker, before, 1)
 
@@ -97,12 +114,14 @@ jobs:
           # ============================================================
           # Patch upow.rs
           # ============================================================
+
           p = Path("native/rdb/src/upow.rs")
           s = p.read_text()
 
           s = s.replace(
               "use std::arch::x86_64::*;",
-              '#[cfg(target_arch = "x86_64")]\nuse std::arch::x86_64::*;'
+              '#[cfg(target_arch = "x86_64")]\n'
+              'use std::arch::x86_64::*;'
           )
 
           old = '''fn detect_backend() -> Backend {
@@ -170,45 +189,64 @@ jobs:
             --file build.Dockerfile .
 
       - name: Build Amadeus
-  working-directory: ex
-  run: |
-    set -euxo pipefail
-    ./build.sh
+        working-directory: ex
+        run: |
+          set -euxo pipefail
 
-    echo "=== CHECK AMADEUS OUTPUT ==="
-    ls -lah
-    ls -lah _build/prod/rel/bakeware/ || true
-    test -f amadeusd
-    file amadeusd
+          ./build.sh
 
-    echo "=== SEARCHING ALL RELEASE OUTPUTS ==="
-    find . -maxdepth 6 -type f -print | sort | tail -200
+          echo "=== CHECK AMADEUS OUTPUT ==="
+          pwd
+          ls -lah
 
-    echo "=== SEARCHING EXECUTABLES ==="
-    find . -type f -executable -print | sort | tail -100
+          echo "=== BAKEWARE OUTPUT ==="
+          ls -lah _build/prod/rel/bakeware/ || true
 
-    echo "=== BUILD DIRECTORY ==="
-    ls -lah _build/prod/rel/ || true
-    find _build/prod/rel -maxdepth 4 -print | sort || true
+          echo "=== SEARCH ALL AMA FILES ==="
+          find . -type f \( \
+            -name "ama" -o \
+            -name "amadeusd" \
+          \) -print || true
+
+          echo "=== SEARCH EXECUTABLES ==="
+          find . -type f -executable -print | sort | tail -100 || true
+
+          echo "=== BUILD DIRECTORY ==="
+          ls -lah _build/prod/rel/ || true
+          find _build/prod/rel -maxdepth 4 -print | sort || true
 
       - name: Find Amadeus binary
         working-directory: ex
         run: |
           set -euxo pipefail
 
-          echo "=== Searching for Amadeus binary ==="
+          echo "=== SEARCHING FOR AMADEUS BINARY ==="
           pwd
 
-          echo "=== Workspace files ==="
-          find . -type f \( -name "ama" -o -name "amadeusd" \) -print
+          echo "=== WORKSPACE FILES ==="
+          find . -type f \( \
+            -name "ama" -o \
+            -name "amadeusd" \
+          \) -print
 
           if [ -f "_build/prod/rel/bakeware/ama" ]; then
             echo "Found ama at expected path"
-            cp "_build/prod/rel/bakeware/ama" amadeusd
+
+            cp \
+              "_build/prod/rel/bakeware/ama" \
+              amadeusd
+
           elif [ -f "amadeusd" ]; then
             echo "Found ./amadeusd"
+
           else
-            AMA=$(find . -type f -name "ama" -print -quit)
+            AMA=$(
+              find . \
+                -type f \
+                -name "ama" \
+                -print \
+                -quit
+            )
 
             if [ -z "$AMA" ]; then
               echo "ERROR: Amadeus binary was not found"
@@ -221,13 +259,15 @@ jobs:
 
           chmod +x amadeusd
 
-          echo "=== Final binary ==="
+          echo "=== FINAL BINARY ==="
           ls -lh amadeusd
           file amadeusd
 
       - name: Verify binary
         working-directory: ex
         run: |
+          set -euxo pipefail
+
           ls -lh amadeusd
           file amadeusd
           sha256sum amadeusd
