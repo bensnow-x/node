@@ -24,22 +24,36 @@ jobs:
           from pathlib import Path
 
           # ============================================================
-          # Patch build.sh
+          # Patch build.sh for ARM64
           # ============================================================
 
           p = Path("build.sh")
           s = p.read_text()
 
-          s = s.replace("podman run -it", "podman run")
+          # Disable interactive Podman mode.
+          s = s.replace(
+              "podman run -it",
+              "podman run"
+          )
+
+          # Mount the actual repository directory.
           s = s.replace(
               "-v ../.:/root/node",
               '-v "$(cd .. && pwd):/root/node"'
           )
-          s = s.replace("-march=haswell", "-march=native")
+
+          # Remove x86-specific CPU tuning.
+          s = s.replace(
+              "-march=haswell",
+              "-march=native"
+          )
+
           s = s.replace(
               "-C target-cpu=haswell",
               "-C target-cpu=native"
           )
+
+          # Use the locally-built image explicitly.
           s = s.replace(
               "erlang_builder",
               "localhost/erlang_builder"
@@ -172,18 +186,17 @@ jobs:
 
           print("================================")
           print("ARM64 PATCH COMPLETE")
-          print("build.sh: x86 flags -> native")
-          print("sol_freivalds.rs: x86 SIMD guarded")
-          print("upow.rs: x86 SIMD guarded")
           print("================================")
           PY
 
-          echo "=== Check build flags ==="
+          echo "=== BUILD FLAGS ==="
           grep -nE 'haswell|march=|target-cpu=' build.sh || true
 
       - name: Build builder image
         working-directory: ex
         run: |
+          set -euxo pipefail
+
           podman build \
             --tag localhost/erlang_builder \
             --file build.Dockerfile .
@@ -193,84 +206,44 @@ jobs:
         run: |
           set -euxo pipefail
 
+          echo "=== BUILD.SH ==="
+          cat build.sh
+
+          echo "=== START AMADEUS BUILD ==="
           ./build.sh
 
-          echo "=== CHECK AMADEUS OUTPUT ==="
+          echo "=== BUILD FINISHED ==="
+
+          echo "=== HOST OUTPUT ==="
           pwd
           ls -lah
 
-          echo "=== BAKEWARE OUTPUT ==="
+          echo "=== EXPECTED BINARY ==="
+          ls -lah amadeusd
+          file amadeusd
+          sha256sum amadeusd
+
+          echo "=== RELEASE DIRECTORY ==="
+          ls -lah _build/prod/rel/ || true
+
+          echo "=== BAKEWARE DIRECTORY ==="
           ls -lah _build/prod/rel/bakeware/ || true
 
-          echo "=== SEARCH ALL AMA FILES ==="
-          find . -type f \( \
-            -name "ama" -o \
-            -name "amadeusd" \
-          \) -print || true
-
-          echo "=== SEARCH EXECUTABLES ==="
-          find . -type f -executable -print | sort | tail -100 || true
-
-          echo "=== BUILD DIRECTORY ==="
-          ls -lah _build/prod/rel/ || true
-          find _build/prod/rel -maxdepth 4 -print | sort || true
-
-      - name: Find Amadeus binary
+      - name: Verify ARM64 binary
         working-directory: ex
         run: |
           set -euxo pipefail
 
-          echo "=== SEARCHING FOR AMADEUS BINARY ==="
-          pwd
+          test -f amadeusd
+          test -x amadeusd
 
-          echo "=== WORKSPACE FILES ==="
-          find . -type f \( \
-            -name "ama" -o \
-            -name "amadeusd" \
-          \) -print
-
-          if [ -f "_build/prod/rel/bakeware/ama" ]; then
-            echo "Found ama at expected path"
-
-            cp \
-              "_build/prod/rel/bakeware/ama" \
-              amadeusd
-
-          elif [ -f "amadeusd" ]; then
-            echo "Found ./amadeusd"
-
-          else
-            AMA=$(
-              find . \
-                -type f \
-                -name "ama" \
-                -print \
-                -quit
-            )
-
-            if [ -z "$AMA" ]; then
-              echo "ERROR: Amadeus binary was not found"
-              exit 1
-            fi
-
-            echo "Found ama at: $AMA"
-            cp "$AMA" amadeusd
-          fi
-
-          chmod +x amadeusd
-
-          echo "=== FINAL BINARY ==="
-          ls -lh amadeusd
-          file amadeusd
-
-      - name: Verify binary
-        working-directory: ex
-        run: |
-          set -euxo pipefail
-
+          echo "=== VERIFY AMADEUS ==="
           ls -lh amadeusd
           file amadeusd
           sha256sum amadeusd
+
+          echo "=== VERIFY ARM64 ==="
+          file amadeusd | grep -Ei 'aarch64|arm64|ARM aarch64'
 
       - name: Upload amadeusd
         uses: actions/upload-artifact@v4
