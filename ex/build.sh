@@ -61,5 +61,4 @@ ls -lh amadeusd
 file amadeusd
 sha256sum amadeusd
 
-echo '=== SIGN RELEASE ==='
-./sign_release.sh
+echo '=== SIGN R
