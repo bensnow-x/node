@@ -1,65 +1,76 @@
 #!/bin/bash
 set -euo pipefail
 
-#&& export ERL_COMPILER_OPTIONS=bin_opt_info \
 CORES=$(nproc)
-#-C codegen-units=$CORES
-#&& export MAKEFLAGS='-j$CORES' \
 
 podman run -it --rm \
   -v ../.:/root/node \
   --entrypoint bash \
   erlang_builder \
   -c "
-    set -euxo pipefail
+set -euxo pipefail
 
-    echo '=== BUILDING AMADEUS ==='
-    cd /root/node/ex
+echo '=== BUILDING AMADEUS ARM64 ==='
 
-    export MIX_ENV=prod
+cd /root/node/ex
 
-    export CC='clang-19'
-    export CXX='clang++-19'
-    export CFLAGS='-march=haswell -pipe'
-    export CXXFLAGS='-march=haswell -pipe'
+export MIX_ENV=prod
 
-    export RUSTFLAGS='-C target-cpu=haswell -C opt-level=3 -C link-arg=-fuse-ld=mold'
+export CC='clang-19'
+export CXX='clang++-19'
 
-    export LLVM_CONFIG_PATH=/usr/bin/llvm-config-19
-    export LIBCLANG_PATH=/usr/lib/llvm-19/lib
+export CFLAGS='-march=armv8-a -pipe'
+export CXXFLAGS='-march=armv8-a -pipe'
 
-    export OPENSSL_ROOT_DIR=/root/openssl-3.6.3
+export RUSTFLAGS='-C target-cpu=generic -C opt-level=3 -C link-arg=-fuse-ld=mold'
 
-    export ERLANG_ROCKSDB_OPTS='-DOPENSSL_USE_STATIC_LIBS=TRUE -DWITH_LZ4=OFF -DWITH_SNAPPY=OFF -DWITH_BZ2=OFF -DWITH_ZLIB=OFF -DWITH_ZSTD=ON -DWITH_BUNDLE_ZSTD=ON'
+export LLVM_CONFIG_PATH=/usr/bin/llvm-config-19
+export LIBCLANG_PATH=/usr/lib/llvm-19/lib
 
-    echo '=== MIX DEPS GET ==='
-    mix deps.get
+export OPENSSL_ROOT_DIR=/root/openssl-3.6.3
 
-    echo '=== MIX RELEASE ==='
-    mix release
+export ERLANG_ROCKSDB_OPTS='-DOPENSSL_USE_STATIC_LIBS=TRUE -DWITH_LZ4=OFF -DWITH_SNAPPY=OFF -DWITH_BZ2=OFF -DWITH_ZLIB=OFF -DWITH_ZSTD=ON -DWITH_BUNDLE_ZSTD=ON'
 
-    echo '=== CHECK BAKEWARE OUTPUT ==='
-    ls -lah _build/prod/rel/bakeware/
+echo '=== CLEAN OLD BUILD ==='
 
-    test -f _build/prod/rel/bakeware/ama
+rm -rf _build/prod/lib/blake3_ex
+rm -rf _build/prod/lib/blake3
+rm -rf _build/prod/rel
 
-    echo '=== COPYING AMADEUS BINARY ==='
-    cp _build/prod/rel/bakeware/ama amadeusd
+mix deps.clean blake3_ex --build
+mix deps.get
 
-    chmod +x amadeusd
-  "
+echo '=== BUILD BLAKE3 ==='
+
+mix deps.compile blake3_ex --force
+
+echo '=== BUILD RELEASE ==='
+
+mix release
+
+echo '=== CHECK BAKEWARE OUTPUT ==='
+
+ls -lah _build/prod/rel/bakeware/
+
+test -f _build/prod/rel/bakeware/ama
+
+echo '=== COPYING AMADEUS BINARY ==='
+
+cp _build/prod/rel/bakeware/ama amadeusd
+
+chmod +x amadeusd
+"
 
 echo '=== BUILD FINISHED ==='
 
-if [ ! -f amadeusd ]; then
-  echo 'ERROR: amadeusd was not created'
-  exit 1
-fi
+test -f amadeusd
 
 echo '=== FINAL BINARY ==='
+
 ls -lh amadeusd
 file amadeusd
 sha256sum amadeusd
 
 echo '=== SIGN RELEASE ==='
+
 ./sign_release.sh
